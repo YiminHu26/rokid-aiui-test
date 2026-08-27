@@ -1,0 +1,1 @@
+export { saveRecords, getHistoryRecords } from './inspection';

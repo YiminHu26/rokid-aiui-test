@@ -1,10 +1,9 @@
-# my-agent
+# My agent
 
-Welcome to JSUI Agent development.
+This is an agent designed for final quality control procedure.
 
-## Getting Started
+## Description
 
-1. Install dependencies
-2. Start the development server
+- The user should follow the sequence of defined inspection items and choose the result between "合格" or "待查验".
 
-Enjoy!
+- After all inspection items have been screened, a summary of all inspection items (name + result) should be displayed.
