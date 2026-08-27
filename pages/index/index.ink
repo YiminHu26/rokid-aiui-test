@@ -6,7 +6,7 @@
 
 <script setup>
 import wx from 'wx';
-import { saveRecords } from '../../utils/inspection';
+import { saveRecords, getHistoryRecords } from '../../utils/inspection';
 
 // 检测项目定义
 const INSPECTION_ITEMS = {
@@ -28,9 +28,10 @@ const INSPECTION_ITEMS = {
 
 export default {
   data: {
-    // 阶段: 'model-select' | 'inspection' | 'done'
+    // 阶段: 'model-select' | 'inspection' | 'done' | 'history'
     phase: 'model-select',
     focused: false,
+    modelFocusIndex: 0,
     selectedModel: '',
     models: ['1001', '1002'],
 
@@ -45,13 +46,19 @@ export default {
 
     // 已完成检测结果
     results: [],
-    resultScrollTop: 0
+    resultScrollTop: 0,
+
+    // 历史记录
+    historyRecords: [],
+    selectedHistoryIndex: -1,
+    historyResultScrollTop: 0
   },
 
   onShow() {
     this.setData({
       phase: 'model-select',
       focused: false,
+      modelFocusIndex: 0,
       selectedModel: '',
       inspectionItems: [],
       currentItemIndex: 0,
@@ -59,7 +66,10 @@ export default {
       currentItemDescription: '',
       optionFocused: 0,
       results: [],
-      resultScrollTop: 0
+      resultScrollTop: 0,
+      historyRecords: [],
+      selectedHistoryIndex: -1,
+      historyResultScrollTop: 0
     });
   },
 
@@ -72,6 +82,7 @@ export default {
       if (!this.data.focused && (code === 'Enter' || code === 'GlobalHook')) {
         this.setData({
           focused: true,
+          modelFocusIndex: this.data.modelFocusIndex,
           selectedModel: this.data.selectedModel || '1001'
         });
         return;
@@ -84,23 +95,24 @@ export default {
       // }
 
       if (this.data.focused) {
-        const idx = this.data.models.indexOf(this.data.selectedModel);
-
         if (code === 'ArrowLeft' || code === 'ArrowUp') {
-          const prevIdx = idx <= 0 ? this.data.models.length - 1 : idx - 1;
-          this.setData({ selectedModel: this.data.models[prevIdx] });
+          const prevIndex = this.data.modelFocusIndex <= 0 ? 2 : this.data.modelFocusIndex - 1;
+          this.setModelFocus(prevIndex);
           return;
         }
 
         if (code === 'ArrowRight' || code === 'ArrowDown') {
-          const nextIdx = idx >= this.data.models.length - 1 ? 0 : idx + 1;
-          this.setData({ selectedModel: this.data.models[nextIdx] });
+          const nextIndex = this.data.modelFocusIndex >= 2 ? 0 : this.data.modelFocusIndex + 1;
+          this.setModelFocus(nextIndex);
           return;
         }
 
         if (code === 'Enter' || code === 'GlobalHook') {
-          // 确认选择，进入检测阶段
-          this.startInspection();
+          if (this.data.modelFocusIndex === 2) {
+            this.showHistory();
+          } else {
+            this.startInspection();
+          }
           return;
         }
 
@@ -141,6 +153,35 @@ export default {
           optionFocused: 0,
           results: [],
           resultScrollTop: 0
+        });
+        return;
+      }
+      return;
+    }
+
+    // ========== 历史记录阶段 ==========
+    if (this.data.phase === 'history') {
+      if (code === 'ArrowUp' || code === 'ArrowDown') {
+        event.preventDefault();
+        if (this.data.historyRecords.length === 0) {
+          return;
+        }
+        const currentIndex = this.data.selectedHistoryIndex < 0
+          ? 0
+          : this.data.selectedHistoryIndex;
+        const nextIndex = code === 'ArrowDown'
+          ? (currentIndex + 1) % this.data.historyRecords.length
+          : (currentIndex - 1 + this.data.historyRecords.length) % this.data.historyRecords.length;
+        this.selectHistoryRecord({ currentTarget: { dataset: { index: nextIndex } } });
+        return;
+      }
+
+      if (code === 'Backspace' || code === 'Escape') {
+        event.preventDefault();
+        this.setData({
+          phase: 'model-select',
+          selectedHistoryIndex: -1,
+          results: []
         });
         return;
       }
@@ -233,8 +274,47 @@ export default {
 
   selectModel(event) {
     const model = event.currentTarget.dataset.model;
-    this.setData({ selectedModel: model });
+    this.setData({
+      focused: true,
+      modelFocusIndex: this.data.models.indexOf(model),
+      selectedModel: model
+    });
     this.startInspection();
+  },
+
+  setModelFocus(index) {
+    this.setData({
+      modelFocusIndex: index,
+      selectedModel: index < this.data.models.length
+        ? this.data.models[index]
+        : this.data.selectedModel
+    });
+  },
+
+  showHistory() {
+    const historyRecords = getHistoryRecords();
+    this.setData({
+      phase: 'history',
+      modelFocusIndex: 2,
+      historyRecords,
+      selectedHistoryIndex: -1,
+      results: [],
+      historyResultScrollTop: 0
+    });
+  },
+
+  selectHistoryRecord(event) {
+    const index = Number(event.currentTarget.dataset.index);
+    const record = this.data.historyRecords[index];
+    if (!record) {
+      return;
+    }
+
+    this.setData({
+      selectedHistoryIndex: index,
+      results: record.results || [],
+      historyResultScrollTop: 0
+    });
   }
 }
 </script>
@@ -245,16 +325,54 @@ export default {
     <text class="title">选择GIS型号</text>
     <view class="button-group">
       <button
-        class="model-btn {{ focused && selectedModel === '1001' ? 'model-btn--focused' : '' }}"
+        class="model-btn {{ focused && modelFocusIndex === 0 ? 'model-btn--focused' : '' }}"
         bindtap="selectModel"
         data-model="1001"
       >1001</button>
       <button
-        class="model-btn {{ focused && selectedModel === '1002' ? 'model-btn--focused' : '' }}"
+        class="model-btn {{ focused && modelFocusIndex === 1 ? 'model-btn--focused' : '' }}"
         bindtap="selectModel"
         data-model="1002"
       >1002</button>
     </view>
+    <button
+      class="model-btn history-btn {{ focused && modelFocusIndex === 2 ? 'model-btn--focused' : '' }}"
+      bindtap="showHistory"
+    >查询历史纪录</button>
+  </view>
+
+  <!-- ========== 历史记录阶段 ========== -->
+  <view class="container history-container" ink:if="{{ phase === 'history' }}">
+    <text class="history-title">历史纪录</text>
+    <scroll-view class="history-list" scroll-y="true">
+      <view
+        class="history-entry"
+        ink:for="{{ historyRecords }}"
+        ink:for-index="index"
+        ink:key="*this"
+      >
+        <view
+          class="history-row {{ selectedHistoryIndex === index ? 'history-row--selected' : '' }}"
+          bindtap="selectHistoryRecord"
+          data-index="{{ index }}"
+        >
+          <text class="history-model">{{ item.model }}</text>
+          <text class="history-timestamp">{{ item.timeStr }}</text>
+        </view>
+        <view
+          class="history-inline-results"
+          ink:if="{{ selectedHistoryIndex === index }}"
+        >
+          <text class="history-result-title">检测结果</text>
+          <view class="result-row" ink:for="{{ item.results }}" ink:key="item">
+            <text class="result-item-name">{{ item.item }}</text>
+            <text class="result-item-value">{{ item.result }}</text>
+          </view>
+        </view>
+      </view>
+      <text class="empty-history" ink:if="{{ historyRecords.length === 0 }}">暂无历史纪录</text>
+    </scroll-view>
+    <text class="hint-text">按返回键回到型号选择</text>
   </view>
 
   <!-- ========== 检测阶段 ========== -->
@@ -315,6 +433,87 @@ export default {
   flex-direction: row;
   gap: 20px;
   margin-bottom: 30px;
+}
+
+.history-btn {
+  color: var(--color-primary);
+  opacity: 0.72;
+  background-color: transparent;
+  border: 1px solid var(--border-color-default);
+  border-radius: 4px;
+  padding: 6px 16px;
+  line-height: 24px;
+  text-align: center;
+}
+
+/* ===== 历史记录阶段 ===== */
+.history-container {
+  justify-content: flex-start;
+  padding-top: 28px;
+}
+
+.history-title,
+.history-result-title {
+  color: var(--color-primary);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.2;
+  margin-bottom: 16px;
+}
+
+.history-list {
+  width: 100%;
+  max-width: 320px;
+  height: 260px;
+  margin-bottom: 16px;
+}
+
+.history-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color-default);
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.history-row--selected {
+  background-color: rgba(64, 255, 94, 0.12);
+  border-color: rgba(64, 255, 94, 0.72);
+}
+
+.history-model,
+.history-timestamp {
+  color: var(--color-primary);
+  font-size: 13px;
+}
+
+.history-timestamp {
+  opacity: 0.72;
+  white-space: nowrap;
+}
+
+.empty-history {
+  color: var(--color-primary);
+  opacity: 0.48;
+  font-size: 13px;
+}
+
+.history-inline-results {
+  padding: 8px 12px 4px;
+  border-left: 1px solid rgba(64, 255, 94, 0.48);
+  border-right: 1px solid rgba(64, 255, 94, 0.48);
+  border-bottom: 1px solid rgba(64, 255, 94, 0.48);
+  margin: -8px 0 8px;
+}
+
+.history-result-title {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 8px;
 }
 
 /* ===== 型号选择按钮 ===== */
@@ -446,6 +645,20 @@ export default {
 .result-item-value {
   color: var(--color-primary);
   opacity: 0.72;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  margin-left: 12px;
+}
+
+.hint-text {
+  color: var(--color-primary);
+  opacity: 0.48;
+  font-size: 12px;
+  font-weight: 400;
+}
+</style>ty: 0.72;
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
