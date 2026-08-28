@@ -1,0 +1,11 @@
+model_id,inspection_id,inspection_item,inspection_description
+8DN8-5,a,inspection item 110kV 1,description 1
+8DN8-5,b,inspection item 110kV 2,description 2
+8DN8-5,c,inspection item 110kV 3,description 3
+8DN8-5,d,inspection item 110kV 4,description 4
+8DN8-5,e,inspection item 110kV 5,description 5
+8DN9-2,a,inspection item 220kV 1,description 1
+8DN9-2,b,inspection item 220kV 2,description 2
+8DN9-2,c,inspection item 220kV 3,description 3
+8DN9-2,d,inspection item 220kV 4,description 4
+8DN9-2,e,inspection item 220kV 5,description 5
